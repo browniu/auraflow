@@ -19,7 +19,7 @@ export const ModuleEditor: React.FC<ModuleEditorProps> = ({ initialModule, onSav
     name: '',
     description: '',
     targetUrl: '',
-    selectors: { input: '', submit: '', result: '' },
+    selectors: { input: '', submit: '', copy: '', result: '' },
     promptTemplate: ''
   });
 
@@ -139,36 +139,61 @@ export const ModuleEditor: React.FC<ModuleEditorProps> = ({ initialModule, onSav
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">输入框选择器</label>
-            <input 
-              type="text" 
-              className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold outline-none text-xs font-mono bg-gray-50 focus:bg-white disabled:text-gray-400"
-              value={formData.selectors.input}
-              onChange={e => setFormData({...formData, selectors: {...formData.selectors, input: e.target.value}})}
-              disabled={isSystemModule}
-            />
+        {/* DOM 选择器配置 */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+            <span>DOM 选择器配置</span>
+            <span className="text-xs text-gray-400 font-normal">（用于自动化操作）</span>
           </div>
-          <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">发送按钮选择器</label>
-            <input 
-              type="text" 
-              className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold outline-none text-xs font-mono bg-gray-50 focus:bg-white disabled:text-gray-400"
-              value={formData.selectors.submit}
-              onChange={e => setFormData({...formData, selectors: {...formData.selectors, submit: e.target.value}})}
-              disabled={isSystemModule}
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">结果轮询选择器</label>
-            <input 
-              type="text" 
-              className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold outline-none text-xs font-mono bg-gray-50 focus:bg-white disabled:text-gray-400"
-              value={formData.selectors.result}
-              onChange={e => setFormData({...formData, selectors: {...formData.selectors, result: e.target.value}})}
-              disabled={isSystemModule}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">输入框选择器</label>
+              <input 
+                type="text" 
+                className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold outline-none text-xs font-mono bg-gray-50 focus:bg-white disabled:text-gray-400"
+                value={formData.selectors.input}
+                onChange={e => setFormData({...formData, selectors: {...formData.selectors, input: e.target.value}})}
+                placeholder="#prompt-textarea"
+                disabled={isSystemModule}
+              />
+              <p className="text-[10px] text-gray-400 mt-1">AI 应用的输入框元素</p>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">发送按钮选择器</label>
+              <input 
+                type="text" 
+                className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold outline-none text-xs font-mono bg-gray-50 focus:bg-white disabled:text-gray-400"
+                value={formData.selectors.submit}
+                onChange={e => setFormData({...formData, selectors: {...formData.selectors, submit: e.target.value}})}
+                placeholder="button[type='submit']"
+                disabled={isSystemModule}
+              />
+              <p className="text-[10px] text-gray-400 mt-1">点击发送的按钮元素</p>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">复制按钮选择器</label>
+              <input 
+                type="text" 
+                className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold outline-none text-xs font-mono bg-gray-50 focus:bg-white disabled:text-gray-400"
+                value={formData.selectors.copy}
+                onChange={e => setFormData({...formData, selectors: {...formData.selectors, copy: e.target.value}})}
+                placeholder="button[aria-label='Copy']"
+                disabled={isSystemModule}
+              />
+              <p className="text-[10px] text-gray-400 mt-1">回复完成后出现的复制按钮（用于检测回复完成）</p>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">结果内容选择器</label>
+              <input 
+                type="text" 
+                className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold outline-none text-xs font-mono bg-gray-50 focus:bg-white disabled:text-gray-400"
+                value={formData.selectors.result}
+                onChange={e => setFormData({...formData, selectors: {...formData.selectors, result: e.target.value}})}
+                placeholder=".markdown"
+                disabled={isSystemModule}
+              />
+              <p className="text-[10px] text-gray-400 mt-1">AI 回复内容的容器元素（用于获取文本）</p>
+            </div>
           </div>
         </div>
       </div>

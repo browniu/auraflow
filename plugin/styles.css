@@ -51,11 +51,28 @@
   height: 8px;
   border-radius: 50%;
   background: #ccc;
+  transition: all 0.3s ease;
 }
 
 .auraflow-status-dot.active {
   background: #10B981;
   box-shadow: 0 0 8px #10B981;
+  animation: pulse 2s infinite;
+}
+
+.auraflow-status-dot.error {
+  background: #EF4444;
+  box-shadow: 0 0 8px #EF4444;
+}
+
+.auraflow-status-dot.completed {
+  background: #3B82F6;
+  box-shadow: 0 0 8px #3B82F6;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .auraflow-actions {
@@ -103,6 +120,15 @@
   border-radius: 4px;
   max-height: 100px;
   overflow-y: auto;
+}
+
+.auraflow-btn:active {
+  transform: scale(0.97);
+}
+
+.auraflow-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .minimized {

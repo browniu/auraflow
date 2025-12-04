@@ -1,12 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { Module, Workflow, ViewState, WorkflowNode, WorkflowEdge, ExecutionState } from './types';
 import * as storage from './services/storageService';
+import * as api from './services/apiService';
 import { ICONS, getColorForString } from './constants';
 import { Button } from './components/ui/Button';
 import { ModuleEditor } from './components/ModuleEditor';
 import { WorkflowCanvas } from './components/WorkflowCanvas';
 import { ToastProvider, useToast } from './components/ui/Toast';
 import { ConfirmModal } from './components/ui/ConfirmModal';
+
+// 云同步图标
+const CloudIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+  </svg>
+);
+
+const DownloadIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="7 10 12 15 17 10"/>
+    <line x1="12" y1="15" x2="12" y2="3"/>
+  </svg>
+);
 
 // Internal App Content Component to use the Toast Hook
 const AuraFlowApp: React.FC = () => {
@@ -40,10 +56,19 @@ const AuraFlowApp: React.FC = () => {
     history: []
   });
 
+  // 服务端连接状态
+  const [serverConnected, setServerConnected] = useState<boolean | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
   useEffect(() => {
     setModules(storage.getModules());
     setWorkflows(storage.getWorkflows());
   }, [view]);
+
+  // 检查服务器连接
+  useEffect(() => {
+    storage.checkServerConnection().then(setServerConnected);
+  }, []);
 
   // --- Handlers ---
 
@@ -167,6 +192,42 @@ const AuraFlowApp: React.FC = () => {
     }
   };
 
+  // 保存到服务器
+  const saveToServer = async () => {
+    setIsSyncing(true);
+    try {
+      const result = await storage.saveToServer();
+      if (result.success) {
+        showToast('已同步到云端', 'success');
+      } else {
+        showToast(result.message || '同步失败', 'error');
+      }
+    } catch (error) {
+      showToast('连接服务器失败', 'error');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // 从服务器加载
+  const loadFromServer = async () => {
+    setIsSyncing(true);
+    try {
+      const result = await storage.loadFromServer();
+      if (result.success) {
+        setModules(storage.getModules());
+        setWorkflows(storage.getWorkflows());
+        showToast('已从云端加载', 'success');
+      } else {
+        showToast(result.message || '加载失败', 'error');
+      }
+    } catch (error) {
+      showToast('连接服务器失败', 'error');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   // --- Execution Logic ---
 
   const startExecution = () => {
@@ -239,7 +300,7 @@ const AuraFlowApp: React.FC = () => {
      return prompt;
   };
 
-  const handleOpenApp = (currentNodeId: string) => {
+  const handleOpenApp = async (currentNodeId: string) => {
     if (!activeWorkflow) return;
     const currentNode = activeWorkflow.nodes.find(n => n.id === currentNodeId);
     if (!currentNode) return;
@@ -253,16 +314,44 @@ const AuraFlowApp: React.FC = () => {
       .then(() => showToast("内容已复制到剪切板", "success"))
       .catch(() => showToast("复制失败", "error"));
 
-    // 2. Open App
+    // 2. 创建会话并打开应用
     if (module.targetUrl) {
-      const fakeSessionId = `sess_${Date.now()}`;
       try {
-        const urlObj = new URL(module.targetUrl);
-        urlObj.hash = `#session=${fakeSessionId}`;
-        window.open(urlObj.toString(), '_blank');
-        // showToast(`已打开 ${module.name}`, 'success');
+        // 通过API创建真实会话
+        const sessionResponse = await api.createSession({
+          nodeId: currentNode.id,
+          moduleId: module.id,
+          prompt: promptText,
+          selectors: module.selectors,
+          targetUrl: module.targetUrl,
+          workflowId: activeWorkflow.id,
+        });
+
+        if (sessionResponse.success) {
+          const urlObj = new URL(module.targetUrl);
+          urlObj.hash = `#session=${sessionResponse.sessionId}`;
+          window.open(urlObj.toString(), '_blank');
+          showToast(`会话已创建: ${sessionResponse.sessionId.slice(-8)}`, 'info');
+        } else {
+          // 服务器不可用时，使用本地会话ID
+          const fallbackSessionId = `local_${Date.now()}`;
+          const urlObj = new URL(module.targetUrl);
+          urlObj.hash = `#session=${fallbackSessionId}`;
+          window.open(urlObj.toString(), '_blank');
+          showToast('使用本地模式（服务器不可用）', 'info');
+        }
       } catch (e) {
-        showToast(`模组 ${module.name} 的 URL 无效`, 'error');
+        // 服务器异常时的降级处理
+        console.error('[AuraFlow] 创建会话失败:', e);
+        const fallbackSessionId = `local_${Date.now()}`;
+        try {
+          const urlObj = new URL(module.targetUrl);
+          urlObj.hash = `#session=${fallbackSessionId}`;
+          window.open(urlObj.toString(), '_blank');
+          showToast('使用本地模式', 'info');
+        } catch {
+          showToast(`模组 ${module.name} 的 URL 无效`, 'error');
+        }
       }
     }
   };
@@ -301,7 +390,33 @@ const AuraFlowApp: React.FC = () => {
           <h1 className="text-4xl font-bold text-gray-800 tracking-tight mb-2">AuraFlow</h1>
           <p className="text-brand-dark">编排您的 AI 数字化劳动力</p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-4 items-center">
+          {/* 服务器连接状态指示 */}
+          <div className="flex items-center gap-2 text-sm">
+            <div className={`w-2 h-2 rounded-full ${serverConnected === true ? 'bg-green-500' : serverConnected === false ? 'bg-red-500' : 'bg-gray-400'}`} />
+            <span className="text-gray-500 text-xs">
+              {serverConnected === true ? '服务器已连接' : serverConnected === false ? '服务器离线' : '检测中...'}
+            </span>
+          </div>
+          
+          {/* 云同步按钮 */}
+          <Button 
+            onClick={saveToServer} 
+            variant="secondary"
+            disabled={isSyncing || !serverConnected}
+            icon={<CloudIcon className="w-4" />}
+          >
+            {isSyncing ? '同步中...' : '保存到云端'}
+          </Button>
+          <Button 
+            onClick={loadFromServer} 
+            variant="secondary"
+            disabled={isSyncing || !serverConnected}
+            icon={<DownloadIcon className="w-4" />}
+          >
+            从云端加载
+          </Button>
+          
           <Button 
             onClick={() => setView(ViewState.MODULE_MANAGER)} 
             variant="secondary" 
@@ -421,9 +536,21 @@ const AuraFlowApp: React.FC = () => {
             className="bg-transparent text-xl font-bold text-gray-800 outline-none focus:border-b border-brand-gold text-center min-w-[200px]"
           />
         </div>
-        <div className="absolute right-6 flex gap-2">
+        <div className="absolute right-6 flex gap-2 items-center">
+           {/* 服务器状态小图标 */}
+           <div className={`w-2 h-2 rounded-full ${serverConnected ? 'bg-green-500' : 'bg-gray-400'}`} title={serverConnected ? '服务器在线' : '服务器离线'} />
+           
            <Button onClick={saveActiveWorkflow} variant="secondary" icon={<ICONS.Save className="w-4"/>}>
             保存
+          </Button>
+          <Button 
+            onClick={saveToServer} 
+            variant="secondary" 
+            disabled={isSyncing || !serverConnected}
+            icon={<CloudIcon className="w-4"/>}
+            title="保存到云端"
+          >
+            {isSyncing ? '...' : '云同步'}
           </Button>
           {!executionState.isRunning ? (
             <Button onClick={startExecution} icon={<ICONS.Play className="w-4"/>}>

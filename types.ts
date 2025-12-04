@@ -7,6 +7,7 @@ export interface Module {
     input: string;
     submit: string;
     result: string;
+    copy: string;
   };
   promptTemplate: string; // e.g., "Summarize this: {{input}}"
   color?: string;
