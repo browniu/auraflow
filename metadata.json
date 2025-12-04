@@ -1,0 +1,5 @@
+{
+  "name": "AuraFlow - AI Workflow Designer",
+  "description": "A semi-automated AI workflow designer that orchestrates interactions with external AI web interfaces. Features a visual graph editor and Gemini-powered assistance.",
+  "requestFramePermissions": []
+}
