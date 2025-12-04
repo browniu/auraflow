@@ -249,7 +249,7 @@ const AuraFlowApp: React.FC = () => {
 
     // 1. Resolve Data & Copy to Clipboard
     const promptText = resolvePromptForNode(currentNode);
-    navigator.clipboard.writeText(promptText)
+    navigator?.clipboard?.writeText(promptText)
       .then(() => showToast("内容已复制到剪切板", "success"))
       .catch(() => showToast("复制失败", "error"));
 

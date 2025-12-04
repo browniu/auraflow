@@ -6,6 +6,7 @@ let sessionData = null;
 
 // --- Mock Data Service (Simulating backend fetch) ---
 const mockFetchTask = (sessionId) => {
+  console.log('[AuraFlow] mockFetchTask');
   return new Promise((resolve) => {
     console.log(`[AuraFlow] Fetching task for session: ${sessionId}`);
     // Simulate network delay

@@ -163,13 +163,13 @@ export const DEFAULT_MODULES: Module[] = [
   },
   {
     id: 'mod_1',
-    name: 'ChatGPT 总结助手',
-    description: '使用 ChatGPT Web 版进行文本总结',
+    name: 'ChatGPT',
+    description: '使用 ChatGPT 进行常规对话',
     targetUrl: 'https://chat.openai.com',
     selectors: {
-      input: '#prompt-textarea',
-      submit: 'button[data-testid="send-button"]',
-      result: '.markdown'
+      input: '#prompt-textarea > p',
+      submit: '#composer-submit-button',
+      result: '.text-token-text-primary:nth-child(2) .text-token-text-secondary'
     },
     promptTemplate: '请总结以下内容，列出3个要点：\n\n{{input}}',
     type: 'app',
@@ -177,13 +177,13 @@ export const DEFAULT_MODULES: Module[] = [
   },
   {
     id: 'mod_2',
-    name: 'Gemini 翻译官',
-    description: '使用 Google Gemini 进行西班牙语翻译',
+    name: 'Gemini',
+    description: '使用 Google Gemini 进行对话',
     targetUrl: 'https://gemini.google.com/app',
     selectors: {
-      input: 'div[contenteditable="true"]',
-      submit: '.send-button',
-      result: 'model-response'
+      input: '#app-root > main > side-navigation-v2 > bard-sidenav-container > bard-sidenav-content > div.content-wrapper > div > div.content-container > chat-window > div > input-container > div > input-area-v2 > div > div > div.text-input-field_textarea-wrapper.ng-tns-c3138046882-6 > div > div > rich-textarea > div.ql-editor.textarea.new-input-ui > p',
+      submit: '#app-root > main > side-navigation-v2 > bard-sidenav-container > bard-sidenav-content > div.content-wrapper > div > div.content-container > chat-window > div > input-container > div > input-area-v2 > div > div > div.trailing-actions-wrapper.ui-ready-fade-in.ng-tns-c3138046882-6 > div.input-buttons-wrapper-bottom.ng-tns-c3138046882-6 > div.mat-mdc-tooltip-trigger.send-button-container.ng-tns-c3138046882-6.inner.ng-star-inserted.visible > button',
+      result: '#b80aa2eea24a2f35 > model-response > div > response-container > div > div.response-container-footer.ng-tns-c363283994-16 > message-actions > div > div > copy-button > button'
     },
     promptTemplate: 'Translate this to Spanish:\n\n{{input}}',
     type: 'app',
