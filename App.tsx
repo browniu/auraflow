@@ -9,21 +9,6 @@ import { WorkflowCanvas } from './components/WorkflowCanvas';
 import { ToastProvider, useToast } from './components/ui/Toast';
 import { ConfirmModal } from './components/ui/ConfirmModal';
 
-// 云同步图标
-const CloudIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
-  </svg>
-);
-
-const DownloadIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-    <polyline points="7 10 12 15 17 10"/>
-    <line x1="12" y1="15" x2="12" y2="3"/>
-  </svg>
-);
-
 // Internal App Content Component to use the Toast Hook
 const AuraFlowApp: React.FC = () => {
   const { showToast } = useToast();
@@ -31,6 +16,7 @@ const AuraFlowApp: React.FC = () => {
   
   const [modules, setModules] = useState<Module[]>([]);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [activeWorkflow, setActiveWorkflow] = useState<Workflow | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   
@@ -58,12 +44,28 @@ const AuraFlowApp: React.FC = () => {
 
   // 服务端连接状态
   const [serverConnected, setServerConnected] = useState<boolean | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
+
+  const refreshData = async () => {
+    const [mods, wfs] = await Promise.all([storage.getModules(), storage.getWorkflows()]);
+    setModules(mods);
+    setWorkflows(wfs);
+  };
+
+  const persistWorkflow = async (next: Workflow) => {
+    setActiveWorkflow(next);
+    await storage.saveWorkflow(next);
+    await refreshData();
+  };
 
   useEffect(() => {
-    setModules(storage.getModules());
-    setWorkflows(storage.getWorkflows());
-  }, [view]);
+    const init = async () => {
+      setIsLoading(true);
+      await storage.loadFromServer();
+      await refreshData();
+      setIsLoading(false);
+    };
+    init();
+  }, []);
 
   // 检查服务器连接
   useEffect(() => {
@@ -72,7 +74,7 @@ const AuraFlowApp: React.FC = () => {
 
   // --- Handlers ---
 
-  const createWorkflow = () => {
+  const createWorkflow = async () => {
     const newWf: Workflow = {
       id: `wf_${Date.now()}`,
       name: '新建工作流',
@@ -80,9 +82,11 @@ const AuraFlowApp: React.FC = () => {
       edges: [],
       lastModified: Date.now()
     };
+    await storage.saveWorkflow(newWf);
+    await refreshData();
     setActiveWorkflow(newWf);
     setView(ViewState.EDITOR);
-    showToast('新建工作流成功', 'success');
+    showToast('新建工作流并保存到云端', 'success');
   };
 
   const openModuleEditor = (module?: Module) => {
@@ -95,51 +99,114 @@ const AuraFlowApp: React.FC = () => {
     setModuleToEdit(null);
   };
 
-  const handleNodeAdd = (moduleId: string, x: number, y: number) => {
+  const handleDuplicateModule = async (mod: Module) => {
+    const newId = `mod_${Date.now()}`;
+    const cloned: Module = {
+      ...mod,
+      id: newId,
+      name: `${mod.name} 副本`,
+      isPreset: false,
+      color: mod.color || getColorForString(newId)
+    };
+    await storage.saveModule(cloned);
+    await refreshData();
+    showToast('模组已复制', 'success');
+  };
+
+  const handleDuplicateWorkflow = async (wf: Workflow) => {
+    const newWorkflowId = `wf_${Date.now()}`;
+    const nodeIdMap: Record<string, string> = {};
+    const newNodes = wf.nodes.map((n, idx) => {
+      const newId = `node_${Date.now()}_${idx}`;
+      nodeIdMap[n.id] = newId;
+      return { ...n, id: newId, moduleId: n.moduleId };
+    });
+    const newEdges = wf.edges.map((e, idx) => ({
+      ...e,
+      id: `edge_${Date.now()}_${idx}`,
+      source: nodeIdMap[e.source],
+      target: nodeIdMap[e.target],
+    }));
+    const cloned: Workflow = {
+      ...wf,
+      id: newWorkflowId,
+      name: `${wf.name} 副本`,
+      nodes: newNodes,
+      edges: newEdges,
+      lastModified: Date.now(),
+    };
+    await storage.saveWorkflow(cloned);
+    await refreshData();
+    showToast('工作流已复制到云端', 'success');
+  };
+
+  const handleDeleteWorkflow = (wf: Workflow) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: '删除工作流',
+      message: `确定删除工作流「${wf.name}」？此操作不可恢复。`,
+      onConfirm: async () => {
+        await storage.deleteWorkflow(wf.id);
+        if (activeWorkflow?.id === wf.id) {
+          setActiveWorkflow(null);
+          setSelectedNodeId(null);
+          setView(ViewState.DASHBOARD);
+        }
+        await refreshData();
+        showToast('工作流已删除', 'info');
+        setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
+  const handleNodeAdd = async (moduleId: string, x: number, y: number) => {
     if (!activeWorkflow) return;
+    const module = modules.find(m => m.id === moduleId);
     const newNode: WorkflowNode = {
       id: `node_${Date.now()}`,
       moduleId,
       x,
-      y
+      y,
+      ...(module?.type === 'trigger' && module?.properties ? { inputData: { ...module.properties } } : {})
     };
-    setActiveWorkflow({
+    const nextWorkflow = {
       ...activeWorkflow,
       nodes: [...activeWorkflow.nodes, newNode]
-    });
+    };
+    await persistWorkflow(nextWorkflow);
   };
 
-  const handleNodeMove = (id: string, x: number, y: number) => {
+  const handleNodeMove = async (id: string, x: number, y: number) => {
     if (!activeWorkflow) return;
-    setActiveWorkflow(prev => {
-        if(!prev) return null;
-        return {
-            ...prev,
-            nodes: prev.nodes.map(n => n.id === id ? { ...n, x, y } : n)
-        }
-    });
+    const nextWorkflow = {
+      ...activeWorkflow,
+      nodes: activeWorkflow.nodes.map(n => n.id === id ? { ...n, x, y } : n)
+    };
+    await persistWorkflow(nextWorkflow);
   };
 
-  const handleNodeUpdate = (id: string, updates: Partial<WorkflowNode>) => {
+  const handleNodeUpdate = async (id: string, updates: Partial<WorkflowNode>) => {
     if (!activeWorkflow) return;
-    setActiveWorkflow(prev => {
-        if(!prev) return null;
-        return {
-            ...prev,
-            nodes: prev.nodes.map(n => n.id === id ? { ...n, ...updates } : n)
-        }
-    });
+    const nextWorkflow = {
+      ...activeWorkflow,
+      nodes: activeWorkflow.nodes.map(n => n.id === id ? { ...n, ...updates } : n)
+    };
+    await persistWorkflow(nextWorkflow);
   };
 
   const handleDeleteModule = (id: string) => {
+    const target = modules.find(m => m.id === id);
+    if (target?.isPreset) {
+      showToast('预设模组不可删除', 'info');
+      return;
+    }
     setConfirmConfig({
       isOpen: true,
       title: '删除模组',
       message: '您确定要删除这个模组吗？此操作无法撤销。',
-      onConfirm: () => {
-        const newModules = modules.filter(m => m.id !== id);
-        setModules(newModules);
-        storage.deleteModule(id);
+      onConfirm: async () => {
+        await storage.deleteModule(id);
+        await refreshData();
         showToast('模组已删除', 'info');
         closeModuleEditor();
         setConfirmConfig(prev => ({ ...prev, isOpen: false }));
@@ -153,15 +220,17 @@ const AuraFlowApp: React.FC = () => {
       isOpen: true,
       title: '移除节点',
       message: '您确定要从工作流中移除此节点吗？',
-      onConfirm: () => {
+      onConfirm: async () => {
         const updatedNodes = activeWorkflow.nodes.filter(n => n.id !== selectedNodeId);
         const updatedEdges = activeWorkflow.edges.filter(e => e.source !== selectedNodeId && e.target !== selectedNodeId);
 
-        setActiveWorkflow({
+        const nextWorkflow = {
           ...activeWorkflow,
           nodes: updatedNodes,
           edges: updatedEdges
-        });
+        };
+
+        await persistWorkflow(nextWorkflow);
         setSelectedNodeId(null);
         showToast('节点已移除', 'info');
         setConfirmConfig(prev => ({ ...prev, isOpen: false }));
@@ -169,7 +238,7 @@ const AuraFlowApp: React.FC = () => {
     });
   };
 
-  const handleEdgeAdd = (source: string, target: string) => {
+  const handleEdgeAdd = async (source: string, target: string) => {
     if (!activeWorkflow) return;
     if (activeWorkflow.edges.some(e => e.source === source && e.target === target)) return;
     
@@ -178,56 +247,22 @@ const AuraFlowApp: React.FC = () => {
       source,
       target
     };
-    setActiveWorkflow({
+    const nextWorkflow = {
       ...activeWorkflow,
       edges: [...activeWorkflow.edges, newEdge]
-    });
+    };
+    await persistWorkflow(nextWorkflow);
   };
 
-  const saveActiveWorkflow = () => {
+  const saveActiveWorkflow = async () => {
     if (activeWorkflow) {
-      storage.saveWorkflow(activeWorkflow);
-      setWorkflows(storage.getWorkflows());
+      await storage.saveWorkflow(activeWorkflow);
+      await refreshData();
       showToast('工作流保存成功', 'success');
     }
   };
 
   // 保存到服务器
-  const saveToServer = async () => {
-    setIsSyncing(true);
-    try {
-      const result = await storage.saveToServer();
-      if (result.success) {
-        showToast('已同步到云端', 'success');
-      } else {
-        showToast(result.message || '同步失败', 'error');
-      }
-    } catch (error) {
-      showToast('连接服务器失败', 'error');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  // 从服务器加载
-  const loadFromServer = async () => {
-    setIsSyncing(true);
-    try {
-      const result = await storage.loadFromServer();
-      if (result.success) {
-        setModules(storage.getModules());
-        setWorkflows(storage.getWorkflows());
-        showToast('已从云端加载', 'success');
-      } else {
-        showToast(result.message || '加载失败', 'error');
-      }
-    } catch (error) {
-      showToast('连接服务器失败', 'error');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   // --- Execution Logic ---
 
   const startExecution = () => {
@@ -401,23 +436,6 @@ const AuraFlowApp: React.FC = () => {
           
           {/* 云同步按钮 */}
           <Button 
-            onClick={saveToServer} 
-            variant="secondary"
-            disabled={isSyncing || !serverConnected}
-            icon={<CloudIcon className="w-4" />}
-          >
-            {isSyncing ? '同步中...' : '保存到云端'}
-          </Button>
-          <Button 
-            onClick={loadFromServer} 
-            variant="secondary"
-            disabled={isSyncing || !serverConnected}
-            icon={<DownloadIcon className="w-4" />}
-          >
-            从云端加载
-          </Button>
-          
-          <Button 
             onClick={() => setView(ViewState.MODULE_MANAGER)} 
             variant="secondary" 
             icon={<ICONS.Settings className="w-4" />}
@@ -432,9 +450,7 @@ const AuraFlowApp: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {workflows.map(wf => (
-          <div key={wf.id} className="glass-panel p-6 rounded-xl hover:shadow-xl hover:shadow-brand-gold/10 transition-all cursor-pointer group"
-            onClick={() => { setActiveWorkflow(wf); setView(ViewState.EDITOR); }}
-          >
+          <div key={wf.id} className="glass-panel p-6 rounded-xl hover:shadow-xl hover:shadow-brand-gold/10 transition-all group">
             <div className="flex justify-between items-start mb-4">
               <div className="w-10 h-10 rounded-lg bg-brand-gold/10 flex items-center justify-center text-brand-gold group-hover:bg-brand-gold group-hover:text-white transition-colors">
                 <ICONS.Play className="w-5 h-5" />
@@ -443,8 +459,31 @@ const AuraFlowApp: React.FC = () => {
                 {new Date(wf.lastModified).toLocaleDateString()}
               </span>
             </div>
-            <h3 className="text-lg font-bold text-gray-800 mb-1">{wf.name}</h3>
-            <p className="text-sm text-gray-500">{wf.nodes.length} 个步骤</p>
+            <h3 className="text-lg font-bold text-gray-800 mb-1 line-clamp-1">{wf.name}</h3>
+            <p className="text-sm text-gray-500 mb-3">{wf.nodes.length} 个步骤</p>
+            <div className="flex justify-between items-center gap-2">
+              <Button 
+                variant="secondary" 
+                className="text-xs flex-1" 
+                onClick={() => { setActiveWorkflow(wf); setView(ViewState.EDITOR); }}
+              >
+                编辑
+              </Button>
+              <Button 
+                variant="secondary" 
+                className="text-xs flex-1" 
+                onClick={() => handleDuplicateWorkflow(wf)}
+              >
+                复制
+              </Button>
+              <Button 
+                variant="danger" 
+                className="text-xs flex-1" 
+                onClick={() => handleDeleteWorkflow(wf)}
+              >
+                删除
+              </Button>
+            </div>
           </div>
         ))}
         {workflows.length === 0 && (
@@ -497,11 +536,18 @@ const AuraFlowApp: React.FC = () => {
                          <Button 
                             variant="secondary" 
                             className="text-xs py-1.5 h-8"
+                            onClick={() => handleDuplicateModule(mod)}
+                         >
+                            复制
+                         </Button>
+                         <Button 
+                            variant="secondary" 
+                            className="text-xs py-1.5 h-8"
                             onClick={() => openModuleEditor(mod)}
                          >
-                            {mod.id === 'mod_start' ? '查看' : '编辑'}
+                            {mod.isPreset ? '查看' : '编辑'}
                          </Button>
-                         {mod.id !== 'mod_start' && (
+                         {!mod.isPreset && (
                            <button 
                               onClick={() => handleDeleteModule(mod.id)}
                               className="w-8 h-8 flex items-center justify-center rounded border border-transparent hover:border-red-200 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
@@ -540,18 +586,6 @@ const AuraFlowApp: React.FC = () => {
            {/* 服务器状态小图标 */}
            <div className={`w-2 h-2 rounded-full ${serverConnected ? 'bg-green-500' : 'bg-gray-400'}`} title={serverConnected ? '服务器在线' : '服务器离线'} />
            
-           <Button onClick={saveActiveWorkflow} variant="secondary" icon={<ICONS.Save className="w-4"/>}>
-            保存
-          </Button>
-          <Button 
-            onClick={saveToServer} 
-            variant="secondary" 
-            disabled={isSyncing || !serverConnected}
-            icon={<CloudIcon className="w-4"/>}
-            title="保存到云端"
-          >
-            {isSyncing ? '...' : '云同步'}
-          </Button>
           {!executionState.isRunning ? (
             <Button onClick={startExecution} icon={<ICONS.Play className="w-4"/>}>
               运行工作流
@@ -574,7 +608,7 @@ const AuraFlowApp: React.FC = () => {
              </h3>
           </div>
           
-          <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+          <div className="p-4 space-y-4 flex-1 overflow-y-auto flex flex-col">
             {!selectedNodeId ? (
               // --- STATE: Module List (Drag & Drop) ---
               <>
@@ -597,9 +631,16 @@ const AuraFlowApp: React.FC = () => {
                     {/* Management Controls */}
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button 
+                        onClick={() => handleDuplicateModule(mod)}
+                        className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-brand-dark"
+                        title="复制模组"
+                      >
+                        <ICONS.Plus className="w-3 h-3" />
+                      </button>
+                      <button 
                         onClick={() => openModuleEditor(mod)}
                         className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-brand-dark"
-                        title={mod.id === 'mod_start' ? '查看' : '编辑'}
+                        title={mod.isPreset ? '查看' : '编辑'}
                       >
                         <ICONS.Edit className="w-3 h-3" />
                       </button>
@@ -621,7 +662,7 @@ const AuraFlowApp: React.FC = () => {
             ) : (
               // --- STATE: Node Properties ---
               selectedNode && selectedModule && (
-                <div className="space-y-6 animate-fade-in">
+                <div className="space-y-6 animate-fade-in flex flex-col h-full">
                   <div className="space-y-2">
                      <label className="text-xs font-bold text-gray-500 uppercase">节点名称</label>
                      <div className="relative">
@@ -708,7 +749,12 @@ const AuraFlowApp: React.FC = () => {
                   )}
 
                   <div className="pt-4 mt-auto">
-                    <Button variant="danger" onClick={handleDeleteNode} className="w-full" icon={<ICONS.Trash className="w-4 h-4"/>}>
+                    <Button 
+                      variant="danger"  
+                      onClick={handleDeleteNode} 
+                      className="w-full hover:bg-red-600 hover:text-white" 
+                      icon={<ICONS.Trash className="w-4 h-4"/>}
+                    >
                       移除节点
                     </Button>
                   </div>
@@ -746,6 +792,14 @@ const AuraFlowApp: React.FC = () => {
     );
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-500 bg-[#F9F8F4]">
+        数据加载中...
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F9F8F4] font-sans text-gray-800 relative">
       {view === ViewState.DASHBOARD && renderDashboard()}
@@ -758,16 +812,15 @@ const AuraFlowApp: React.FC = () => {
            <div className="w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl rounded-xl overflow-hidden transform animate-scale-in bg-white">
               <ModuleEditor 
                   initialModule={moduleToEdit}
-                  onSave={(mod) => {
-                    const idx = modules.findIndex(m => m.id === mod.id);
-                    const newModules = idx >= 0 ? modules.map((m, i) => i === idx ? mod : m) : [...modules, mod];
-                    setModules(newModules);
-                    storage.saveModule(mod);
+                  onSave={async (mod) => {
+                    await storage.saveModule(mod);
+                    await refreshData();
                     showToast('模组已保存', 'success');
                     closeModuleEditor();
                   }}
                   onCancel={closeModuleEditor}
                   onDelete={moduleToEdit ? (id) => handleDeleteModule(id) : undefined}
+                  onDuplicate={(mod) => handleDuplicateModule(mod)}
                 />
            </div>
         </div>

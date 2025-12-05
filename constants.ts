@@ -1,5 +1,4 @@
 import React from "react";
-import { Module } from "./types";
 
 export const ICONS = {
   Plus: (props: React.SVGProps<SVGSVGElement>) => (
@@ -150,45 +149,5 @@ export const getColorForString = (str: string) => {
   return MODULE_COLORS[index];
 };
 
-export const DEFAULT_MODULES: Module[] = [
-  {
-    id: 'mod_start',
-    name: '启动触发器',
-    description: '工作流的初始输入参数定义',
-    targetUrl: '',
-    selectors: { input: '', submit: '', result: '', copy: '' },
-    promptTemplate: '',
-    type: 'trigger',
-    color: '#333333'
-  },
-  {
-    id: 'mod_1',
-    name: 'ChatGPT',
-    description: '使用 ChatGPT 进行常规对话',
-    targetUrl: 'https://chat.openai.com',
-    selectors: {
-      input: '#prompt-textarea > p',
-      submit: '#composer-submit-button',
-      result: '.markdown',
-      copy: '.text-token-text-primary:nth-child(2) .text-token-text-secondary'
-    },
-    promptTemplate: '请总结以下内容，列出3个要点：\n\n{{input}}',
-    type: 'app',
-    color: '#74AA9C'
-  },
-  {
-    id: 'mod_2',
-    name: 'Gemini',
-    description: '使用 Google Gemini 进行对话',
-    targetUrl: 'https://gemini.google.com/app',
-    selectors: {
-      input: '#app-root > main > side-navigation-v2 > bard-sidenav-container > bard-sidenav-content > div.content-wrapper > div > div.content-container > chat-window > div > input-container > div > input-area-v2 > div > div > div.text-input-field_textarea-wrapper.ng-tns-c3138046882-6 > div > div > rich-textarea > div.ql-editor.textarea.new-input-ui > p',
-      submit: '#app-root > main > side-navigation-v2 > bard-sidenav-container > bard-sidenav-content > div.content-wrapper > div > div.content-container > chat-window > div > input-container > div > input-area-v2 > div > div > div.trailing-actions-wrapper.ui-ready-fade-in.ng-tns-c3138046882-6 > div.input-buttons-wrapper-bottom.ng-tns-c3138046882-6 > div.mat-mdc-tooltip-trigger.send-button-container.ng-tns-c3138046882-6.inner.ng-star-inserted.visible > button',
-      result: '#b80aa2eea24a2f35 > model-response > div > response-container > div > div.response-container-footer.ng-tns-c363283994-16 > message-actions > div > div > copy-button > button',
-      copy: ''
-    },
-    promptTemplate: 'Translate this to Spanish:\n\n{{input}}',
-    type: 'app',
-    color: '#4A90E2'
-  }
-];
+// 注意：预设模组已迁移到服务端 server/data/modules/default.json
+// 所有模组数据现在通过 API 从服务端获取

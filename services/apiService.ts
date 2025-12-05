@@ -9,9 +9,6 @@ import { Module, Workflow } from '../types';
 // 服务端地址配置
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3737/api';
 
-// 默认项目ID (单用户模式，可扩展为多项目)
-const DEFAULT_PROJECT_ID = 'default_project';
-
 // ============================================
 // 通用请求方法
 // ============================================
@@ -46,59 +43,39 @@ async function request<T>(
 }
 
 // ============================================
-// 项目管理 API
+// 模组管理 API
 // ============================================
 
-export interface ProjectData {
-  projectId: string;
+export interface ModulesResponse {
   modules: Module[];
-  workflows: Workflow[];
-  savedAt: number;
-  version: string;
 }
 
-export interface SaveProjectResponse {
+export interface ModuleResponse {
+  module: Module;
+}
+
+export interface SaveModuleResponse {
   success: boolean;
   message: string;
-  projectId: string;
-  savedAt: number;
-}
-
-export interface ProjectListItem {
-  projectId: string;
-  savedAt: number;
-  workflowCount: number;
-  moduleCount: number;
+  module: Module;
 }
 
 /**
- * 保存项目到服务器
+ * 获取所有模组（预设 + 自定义）
  */
-export async function saveProjectToServer(
-  modules: Module[],
-  workflows: Workflow[],
-  projectId: string = DEFAULT_PROJECT_ID
-): Promise<SaveProjectResponse> {
-  return request<SaveProjectResponse>('/project/save', {
-    method: 'POST',
-    body: JSON.stringify({
-      projectId,
-      modules,
-      workflows,
-    }),
-  });
+export async function getModules(): Promise<Module[]> {
+  const response = await request<ModulesResponse>('/modules');
+  return response.modules;
 }
 
 /**
- * 从服务器加载项目
+ * 获取单个模组
  */
-export async function loadProjectFromServer(
-  projectId: string = DEFAULT_PROJECT_ID
-): Promise<ProjectData | null> {
+export async function getModule(moduleId: string): Promise<Module | null> {
   try {
-    return await request<ProjectData>(`/project/load/${projectId}`);
+    const response = await request<ModuleResponse>(`/modules/${moduleId}`);
+    return response.module;
   } catch (error) {
-    // 项目不存在时返回 null
     if (error instanceof Error && error.message.includes('404')) {
       return null;
     }
@@ -107,18 +84,111 @@ export async function loadProjectFromServer(
 }
 
 /**
- * 获取项目列表
+ * 保存模组（创建或更新）
  */
-export async function getProjectList(): Promise<ProjectListItem[]> {
-  const response = await request<{ projects: ProjectListItem[] }>('/project/list');
-  return response.projects;
+export async function saveModule(module: Module): Promise<SaveModuleResponse> {
+  return request<SaveModuleResponse>('/modules', {
+    method: 'POST',
+    body: JSON.stringify({ module }),
+  });
 }
 
 /**
- * 删除项目
+ * 删除模组
  */
-export async function deleteProject(projectId: string): Promise<void> {
-  await request(`/project/${projectId}`, { method: 'DELETE' });
+export async function deleteModule(moduleId: string): Promise<void> {
+  await request(`/modules/${moduleId}`, { method: 'DELETE' });
+}
+
+// ============================================
+// 工作流管理 API
+// ============================================
+
+export interface WorkflowListItem {
+  id: string;
+  name: string;
+  lastModified: number;
+  nodeCount: number;
+}
+
+export interface WorkflowsResponse {
+  workflows: WorkflowListItem[];
+}
+
+export interface WorkflowResponse {
+  workflow: Workflow;
+}
+
+export interface SaveWorkflowResponse {
+  success: boolean;
+  message: string;
+  workflow: Workflow;
+}
+
+/**
+ * 获取所有工作流列表
+ */
+export async function getWorkflows(): Promise<Workflow[]> {
+  const response = await request<WorkflowsResponse>('/workflows');
+  // 返回基本信息，完整数据需要单独加载
+  return response.workflows.map(w => ({
+    id: w.id,
+    name: w.name,
+    lastModified: w.lastModified,
+    nodes: [],
+    edges: []
+  }));
+}
+
+/**
+ * 获取所有工作流的完整数据
+ */
+export async function getWorkflowsFull(): Promise<Workflow[]> {
+  const response = await request<WorkflowsResponse>('/workflows');
+  const workflows: Workflow[] = [];
+  
+  for (const item of response.workflows) {
+    try {
+      const full = await getWorkflow(item.id);
+      if (full) workflows.push(full);
+    } catch (e) {
+      console.error(`[AuraFlow] 加载工作流失败: ${item.id}`, e);
+    }
+  }
+  
+  return workflows;
+}
+
+/**
+ * 获取单个工作流
+ */
+export async function getWorkflow(workflowId: string): Promise<Workflow | null> {
+  try {
+    const response = await request<WorkflowResponse>(`/workflows/${workflowId}`);
+    return response.workflow;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('404')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * 保存工作流（创建或更新）
+ */
+export async function saveWorkflow(workflow: Workflow): Promise<SaveWorkflowResponse> {
+  return request<SaveWorkflowResponse>('/workflows', {
+    method: 'POST',
+    body: JSON.stringify({ workflow }),
+  });
+}
+
+/**
+ * 删除工作流
+ */
+export async function deleteWorkflow(workflowId: string): Promise<void> {
+  await request(`/workflows/${workflowId}`, { method: 'DELETE' });
 }
 
 // ============================================
@@ -243,14 +313,22 @@ export async function checkServerHealth(): Promise<boolean> {
 // ============================================
 
 export default {
-  saveProjectToServer,
-  loadProjectFromServer,
-  getProjectList,
-  deleteProject,
+  // 模组
+  getModules,
+  getModule,
+  saveModule,
+  deleteModule,
+  // 工作流
+  getWorkflows,
+  getWorkflowsFull,
+  getWorkflow,
+  saveWorkflow,
+  deleteWorkflow,
+  // 会话
   createSession,
   getSession,
   completeSession,
   getSessionStatus,
+  // 健康检查
   checkServerHealth,
 };
-

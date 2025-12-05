@@ -1,17 +1,19 @@
 export interface Module {
   id: string;
   name: string;
-  targetUrl: string;
+  targetUrl?: string;
   description: string;
-  selectors: {
+  isPreset?: boolean; // 预设模组标记，前端视图只读
+  selectors?: {
     input: string;
     submit: string;
     result: string;
     copy: string;
   };
-  promptTemplate: string; // e.g., "Summarize this: {{input}}"
+  promptTemplate?: string; // e.g., "Summarize this: {{input}}"
   color?: string;
   type?: 'app' | 'trigger';
+  properties?: any;
 }
 
 export interface WorkflowNode {

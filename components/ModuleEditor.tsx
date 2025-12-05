@@ -6,25 +6,46 @@ import { generateModuleConfig } from '../services/geminiService';
 
 interface ModuleEditorProps {
   initialModule?: Module | null;
-  onSave: (module: Module) => void;
+  onSave: (module: Module) => void | Promise<void>;
   onCancel: () => void;
-  onDelete?: (id: string) => void;
+  onDelete?: (id: string) => void | Promise<void>;
+  onDuplicate?: (module: Module) => void | Promise<void>;
 }
 
-export const ModuleEditor: React.FC<ModuleEditorProps> = ({ initialModule, onSave, onCancel, onDelete }) => {
-  const isSystemModule = initialModule?.id === 'mod_start';
-
-  const [formData, setFormData] = useState<Module>(initialModule || {
-    id: `mod_${Date.now()}`,
-    name: '',
-    description: '',
-    targetUrl: '',
-    selectors: { input: '', submit: '', copy: '', result: '' },
-    promptTemplate: ''
+export const ModuleEditor: React.FC<ModuleEditorProps> = ({ initialModule, onSave, onCancel, onDelete, onDuplicate }) => {
+  const normalizeModule = (mod?: Module | null): Module => ({
+    id: mod?.id || `mod_${Date.now()}`,
+    name: mod?.name || '',
+    description: mod?.description || '',
+    targetUrl: mod?.targetUrl || '',
+    selectors: {
+      input: mod?.selectors?.input || '',
+      submit: mod?.selectors?.submit || '',
+      copy: mod?.selectors?.copy || '',
+      result: mod?.selectors?.result || ''
+    },
+    promptTemplate: mod?.promptTemplate || '',
+    color: mod?.color,
+    type: mod?.type || 'app',
+    properties: mod?.properties || {},
+    isPreset: mod?.isPreset || false
   });
+
+  const isPresetModule = initialModule?.isPreset;
+
+  const [formData, setFormData] = useState<Module>(normalizeModule(initialModule));
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [userDesc, setUserDesc] = useState('');
+  const [newPropKey, setNewPropKey] = useState('');
+  const [newPropVal, setNewPropVal] = useState('');
+
+  const handleTypeChange = (nextType: 'app' | 'trigger') => {
+    setFormData(prev => ({
+      ...prev,
+      type: nextType
+    }));
+  };
 
   const handleSmartGenerate = async () => {
     if (!process.env.API_KEY) {
@@ -54,16 +75,16 @@ export const ModuleEditor: React.FC<ModuleEditorProps> = ({ initialModule, onSav
       {/* Header */}
       <div className="flex justify-between items-center p-6 pb-2 shrink-0">
         <h2 className="text-2xl font-bold text-gray-800">
-          {initialModule ? (isSystemModule ? '查看模组 (系统预制)' : '编辑模组') : '创建新模组'}
+          {initialModule ? (isPresetModule ? '查看模组 (预设只读)' : '编辑模组') : '创建新模组'}
         </h2>
         <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100 transition-colors">✕</button>
       </div>
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
-        {isSystemModule && (
+        {isPresetModule && (
           <div className="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-sm border border-yellow-100">
-            这是一个系统预制模组，仅支持查看，不支持修改配置。
+            这是一个系统预设模组，仅支持查看与复制，不支持直接修改。
           </div>
         )}
 
@@ -77,19 +98,29 @@ export const ModuleEditor: React.FC<ModuleEditorProps> = ({ initialModule, onSav
               value={formData.name}
               onChange={e => setFormData({...formData, name: e.target.value})}
               placeholder="例如：ChatGPT 总结助手"
-              disabled={isSystemModule}
+              disabled={isPresetModule}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">目标 URL</label>
-            <input 
-              type="text" 
-              className="w-full p-2.5 rounded-lg border border-gray-200 focus:border-brand-gold focus:ring-1 focus:ring-brand-gold outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500"
-              value={formData.targetUrl}
-              onChange={e => setFormData({...formData, targetUrl: e.target.value})}
-              placeholder="https://..."
-              disabled={isSystemModule}
-            />
+            <label className="block text-sm font-medium text-gray-700 mb-2">模组类型</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleTypeChange('app')}
+                disabled={isPresetModule}
+                className={`p-2.5 rounded-lg border text-sm ${formData.type !== 'trigger' ? 'border-brand-gold bg-brand-gold/10 text-brand-dark' : 'border-gray-200 text-gray-600'} disabled:bg-gray-50 disabled:text-gray-400`}
+              >
+                应用模组
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTypeChange('trigger')}
+                disabled={isPresetModule}
+                className={`p-2.5 rounded-lg border text-sm ${formData.type === 'trigger' ? 'border-brand-gold bg-brand-gold/10 text-brand-dark' : 'border-gray-200 text-gray-600'} disabled:bg-gray-50 disabled:text-gray-400`}
+              >
+                触发器模组
+              </button>
+            </div>
           </div>
         </div>
 
@@ -100,12 +131,12 @@ export const ModuleEditor: React.FC<ModuleEditorProps> = ({ initialModule, onSav
             className="w-full p-2.5 rounded-lg border border-gray-200 focus:border-brand-gold focus:ring-1 focus:ring-brand-gold outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500"
             value={formData.description}
             onChange={e => setFormData({...formData, description: e.target.value})}
-            disabled={isSystemModule}
+            disabled={isPresetModule}
           />
         </div>
 
         {/* Gemini Assistant Section */}
-        {!isSystemModule && (
+        {!isPresetModule && formData.type !== 'trigger' && (
           <div className="bg-gradient-to-r from-brand-gold/10 to-transparent p-5 rounded-xl border border-brand-gold/20">
             <div className="flex items-center gap-2 mb-2 text-brand-dark font-semibold">
               <ICONS.Sparkles className="w-4 h-4" />
@@ -127,89 +158,182 @@ export const ModuleEditor: React.FC<ModuleEditorProps> = ({ initialModule, onSav
           </div>
         )}
 
-        {/* Configuration */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">提示词模板 (Prompt Template)</label>
-          <textarea 
-            className="w-full p-3 rounded-lg border border-gray-200 focus:border-brand-gold focus:ring-1 focus:ring-brand-gold outline-none font-mono text-sm h-32 leading-relaxed disabled:bg-gray-50 disabled:text-gray-500"
-            value={formData.promptTemplate}
-            onChange={e => setFormData({...formData, promptTemplate: e.target.value})}
-            placeholder="使用 {{input}} 作为用户输入的占位符"
-            disabled={isSystemModule}
-          />
-        </div>
+        {formData.type !== 'trigger' && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">目标 URL</label>
+              <input 
+                type="text" 
+                className="w-full p-2.5 rounded-lg border border-gray-200 focus:border-brand-gold focus:ring-1 focus:ring-brand-gold outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500"
+                value={formData.targetUrl}
+                onChange={e => setFormData({...formData, targetUrl: e.target.value})}
+                placeholder="https://..."
+                disabled={isPresetModule}
+              />
+            </div>
 
-        {/* DOM 选择器配置 */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-            <span>DOM 选择器配置</span>
-            <span className="text-xs text-gray-400 font-normal">（用于自动化操作）</span>
+            {/* Configuration */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">提示词模板 (Prompt Template)</label>
+              <textarea 
+                className="w-full p-3 rounded-lg border border-gray-200 focus:border-brand-gold focus:ring-1 focus:ring-brand-gold outline-none font-mono text-sm h-32 leading-relaxed disabled:bg-gray-50 disabled:text-gray-500"
+                value={formData.promptTemplate}
+                onChange={e => setFormData({...formData, promptTemplate: e.target.value})}
+                placeholder="使用 {{input}} 作为用户输入的占位符"
+                disabled={isPresetModule}
+              />
+            </div>
+
+            {/* DOM 选择器配置 */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <span>DOM 选择器配置</span>
+                <span className="text-xs text-gray-400 font-normal">（用于自动化操作）</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">输入框选择器</label>
+                  <input 
+                    type="text" 
+                    className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold outline-none text-xs font-mono bg-gray-50 focus:bg-white disabled:text-gray-400"
+                    value={formData.selectors?.input}
+                    onChange={e => setFormData({...formData, selectors: {...(formData.selectors || {}), input: e.target.value}})}
+                    placeholder="#prompt-textarea"
+                    disabled={isPresetModule}
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">AI 应用的输入框元素</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">发送按钮选择器</label>
+                  <input 
+                    type="text" 
+                    className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold outline-none text-xs font-mono bg-gray-50 focus:bg-white disabled:text-gray-400"
+                    value={formData.selectors?.submit}
+                    onChange={e => setFormData({...formData, selectors: {...(formData.selectors || {}), submit: e.target.value}})}
+                    placeholder="button[type='submit']"
+                    disabled={isPresetModule}
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">点击发送的按钮元素</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">复制按钮选择器</label>
+                  <input 
+                    type="text" 
+                    className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold outline-none text-xs font-mono bg-gray-50 focus:bg-white disabled:text-gray-400"
+                    value={formData.selectors?.copy}
+                    onChange={e => setFormData({...formData, selectors: {...(formData.selectors || {}), copy: e.target.value}})}
+                    placeholder="button[aria-label='Copy']"
+                    disabled={isPresetModule}
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">回复完成后出现的复制按钮（用于检测回复完成）</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">结果内容选择器</label>
+                  <input 
+                    type="text" 
+                    className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold outline-none text-xs font-mono bg-gray-50 focus:bg-white disabled:text-gray-400"
+                    value={formData.selectors?.result}
+                    onChange={e => setFormData({...formData, selectors: {...(formData.selectors || {}), result: e.target.value}})}
+                    placeholder=".markdown"
+                    disabled={isPresetModule}
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">AI 回复内容的容器元素（用于获取文本）</p>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {formData.type === 'trigger' && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <span>触发器默认输入</span>
+              <span className="text-xs text-gray-400 font-normal">（新增节点时会自动带入这些键值）</span>
+            </div>
+            <div className="bg-white rounded border border-gray-200 p-3 space-y-2">
+              {Object.entries(formData.properties || {}).map(([key, val]) => (
+                <div key={key} className="flex gap-2 items-center">
+                  <input
+                    value={key}
+                    readOnly
+                    className="w-1/3 text-xs bg-gray-50 p-2 rounded border border-gray-200 text-gray-500"
+                  />
+                  <input
+                    value={val}
+                    onChange={e => setFormData(prev => ({
+                      ...prev,
+                      properties: { ...(prev.properties || {}), [key]: e.target.value }
+                    }))}
+                    disabled={isPresetModule}
+                    className="flex-1 text-xs p-2 rounded border border-gray-200 focus:border-brand-gold outline-none disabled:bg-gray-50"
+                  />
+                  {!isPresetModule && (
+                    <button
+                      onClick={() => {
+                        const next = { ...(formData.properties || {}) };
+                        delete next[key];
+                        setFormData(prev => ({ ...prev, properties: next }));
+                      }}
+                      className="text-gray-400 hover:text-red-500 text-sm px-2"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              {!isPresetModule && (
+                <div className="flex gap-2 pt-2">
+                  <input
+                    value={newPropKey}
+                    onChange={e => setNewPropKey(e.target.value)}
+                    placeholder="变量 Key"
+                    className="w-1/3 text-xs p-2 rounded border border-gray-200 focus:border-brand-gold outline-none"
+                  />
+                  <input
+                    value={newPropVal}
+                    onChange={e => setNewPropVal(e.target.value)}
+                    placeholder="默认值"
+                    className="flex-1 text-xs p-2 rounded border border-gray-200 focus:border-brand-gold outline-none"
+                  />
+                  <Button
+                    onClick={() => {
+                      if (!newPropKey) return;
+                      setFormData(prev => ({
+                        ...prev,
+                        properties: { ...(prev.properties || {}), [newPropKey]: newPropVal }
+                      }));
+                      setNewPropKey('');
+                      setNewPropVal('');
+                    }}
+                    className="!p-2 text-xs"
+                  >
+                    添加
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">输入框选择器</label>
-              <input 
-                type="text" 
-                className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold outline-none text-xs font-mono bg-gray-50 focus:bg-white disabled:text-gray-400"
-                value={formData.selectors.input}
-                onChange={e => setFormData({...formData, selectors: {...formData.selectors, input: e.target.value}})}
-                placeholder="#prompt-textarea"
-                disabled={isSystemModule}
-              />
-              <p className="text-[10px] text-gray-400 mt-1">AI 应用的输入框元素</p>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">发送按钮选择器</label>
-              <input 
-                type="text" 
-                className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold outline-none text-xs font-mono bg-gray-50 focus:bg-white disabled:text-gray-400"
-                value={formData.selectors.submit}
-                onChange={e => setFormData({...formData, selectors: {...formData.selectors, submit: e.target.value}})}
-                placeholder="button[type='submit']"
-                disabled={isSystemModule}
-              />
-              <p className="text-[10px] text-gray-400 mt-1">点击发送的按钮元素</p>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">复制按钮选择器</label>
-              <input 
-                type="text" 
-                className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold outline-none text-xs font-mono bg-gray-50 focus:bg-white disabled:text-gray-400"
-                value={formData.selectors.copy}
-                onChange={e => setFormData({...formData, selectors: {...formData.selectors, copy: e.target.value}})}
-                placeholder="button[aria-label='Copy']"
-                disabled={isSystemModule}
-              />
-              <p className="text-[10px] text-gray-400 mt-1">回复完成后出现的复制按钮（用于检测回复完成）</p>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">结果内容选择器</label>
-              <input 
-                type="text" 
-                className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold outline-none text-xs font-mono bg-gray-50 focus:bg-white disabled:text-gray-400"
-                value={formData.selectors.result}
-                onChange={e => setFormData({...formData, selectors: {...formData.selectors, result: e.target.value}})}
-                placeholder=".markdown"
-                disabled={isSystemModule}
-              />
-              <p className="text-[10px] text-gray-400 mt-1">AI 回复内容的容器元素（用于获取文本）</p>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Footer */}
       <div className="p-6 pt-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center shrink-0">
          <div>
-            {initialModule && onDelete && !isSystemModule && (
+            {initialModule && onDelete && !isPresetModule && (
                <Button variant="danger" onClick={() => onDelete(formData.id)} icon={<ICONS.Trash className="w-4 h-4"/>}>
                   删除模组
                </Button>
             )}
          </div>
          <div className="flex gap-3">
+           {initialModule && onDuplicate && (
+             <Button variant="secondary" onClick={() => { onDuplicate(formData); onCancel(); }}>
+               复制模组
+             </Button>
+           )}
            <Button variant="ghost" onClick={onCancel}>取消</Button>
-           {!isSystemModule && (
+           {!isPresetModule && (
              <Button onClick={() => onSave(formData)}>
                <ICONS.Save className="w-4 h-4" /> 保存模组
              </Button>

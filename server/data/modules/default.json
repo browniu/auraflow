@@ -1,0 +1,77 @@
+[
+  {
+    "id": "mod_start",
+    "name": "启动触发器",
+    "description": "工作流的初始输入参数定义",
+    "type": "trigger",
+    "isPreset": true,
+    "color": "#333333",
+    "properties": {
+      "input": "hello world"
+    }
+  },
+  {
+    "id": "mod_1",
+    "name": "ChatGPT Prompt Generator",
+    "description": "使用 ChatGPT 生成专业提示词",
+    "targetUrl": "https://chatgpt.com/?openaicom_referred=true",
+    "selectors": {
+      "input": "#prompt-textarea > p",
+      "submit": "#composer-submit-button",
+      "result": ".markdown",
+      "copy": ".text-token-text-primary:nth-child(2) .text-token-text-secondary"
+    },
+    "promptTemplate": "请基于我的原始需求描述，生成一份专业、清晰、精炼的提示词：\n\n{{input}}，输出格式为{\"prompt\": \"{{prompt}}\"}",
+    "type": "app",
+    "isPreset": true,
+    "color": "#74AA9C"
+  },
+  {
+    "id": "mod_2",
+    "name": "ChatGPT PRD Generator",
+    "description": "使用ChatGPT生成专业的产品PRD，用于交付给技术总监审核",
+    "targetUrl": "https://chatgpt.com/?openaicom_referred=true",
+    "selectors": {
+      "input": "#prompt-textarea > p",
+      "submit": "#composer-submit-button",
+      "result": ".markdown",
+      "copy": ".text-token-text-primary:nth-child(2) .text-token-text-secondary"
+    },
+    "promptTemplate": "根据提示词：\n\n{{prompt}}\n\n生成一份专业、清晰、精炼的产品PRD，用于交付给技术总监审核。输出格式为{\"prd\": \"{{prd}}\"}",
+    "type": "app",
+    "isPreset": true,
+    "color": "#74AA9C"
+  },
+  {
+    "id": "mod_3",
+    "name": "ChatGPT Developer",
+    "description": "使用ChatGPT根据产品PRD，生成开发文档，用于交付给开发团队",
+    "targetUrl": "https://chatgpt.com/?openaicom_referred=true",
+    "selectors": {
+      "input": "#prompt-textarea > p",
+      "submit": "#composer-submit-button",
+      "result": ".markdown",
+      "copy": ".text-token-text-primary:nth-child(2) .text-token-text-secondary"
+    },
+    "promptTemplate": "根据产品PRD：\n\n{{prd}}\n\n生成一份专业、清晰、精炼的开发文档，用于交付给开发团队。输出格式为{\"dev_doc\": \"{{dev_doc}}\"}",
+    "type": "app",
+    "isPreset": true,
+    "color": "#74AA9C"
+  },
+  {
+    "id": "mod_4",
+    "name": "Gemini",
+    "description": "使用 Google Gemini 生成专业提示词",
+    "targetUrl": "https://gemini.google.com/app",
+    "selectors": {
+      "input": "#app-root > main > side-navigation-v2 > bard-sidenav-container > bard-sidenav-content > div.content-wrapper > div > div.content-container > chat-window > div > input-container > div > input-area-v2 > div > div > div.text-input-field_textarea-wrapper.ng-tns-c3138046882-6 > div > div > rich-textarea > div.ql-editor.textarea.new-input-ui > p",
+      "submit": "#app-root > main > side-navigation-v2 > bard-sidenav-container > bard-sidenav-content > div.content-wrapper > div > div.content-container > chat-window > div > input-container > div > input-area-v2 > div > div > div.trailing-actions-wrapper.ui-ready-fade-in.ng-tns-c3138046882-6 > div.input-buttons-wrapper-bottom.ng-tns-c3138046882-6 > div.mat-mdc-tooltip-trigger.send-button-container.ng-tns-c3138046882-6.inner.ng-star-inserted.visible > button",
+      "result": "message-content",
+      "copy": "#b80aa2eea24a2f35 > model-response > div > response-container > div > div.response-container-footer.ng-tns-c363283994-16 > message-actions > div > div > copy-button > button"
+    },
+    "promptTemplate": "请基于我的原始需求描述，生成一份专业、清晰、精炼的提示词：\n\n{{input}}，输出格式为{\"prompt\": \"{{prompt}}\"}",
+    "type": "app",
+    "isPreset": true,
+    "color": "#4A90E2"
+  }
+]
