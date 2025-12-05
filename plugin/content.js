@@ -8,7 +8,7 @@ console.log('[AuraFlow] Content script loaded');
 // ============================================
 
 // 服务端 API 地址 (可通过插件设置配置)
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = 'http://localhost:3737/api';
 
 let overlay = null;
 let sessionData = null;

@@ -37,7 +37,7 @@ npm start
 
 这将同时启动：
 - 前端开发服务器：http://localhost:3000
-- 后端 API 服务器：http://localhost:3001
+- 后端 API 服务器：http://localhost:3737
 
 **方式二：分开启动**
 
@@ -57,8 +57,8 @@ npm run dev
 # Gemini API Key (用于 AI 智能配置助手)
 GEMINI_API_KEY=your_gemini_api_key_here
 
-# 服务端 API 地址 (可选，默认 http://localhost:3001/api)
-VITE_API_URL=http://localhost:3001/api
+# 服务端 API 地址 (可选，默认 http://localhost:3737/api)
+VITE_API_URL=http://localhost:3737/api
 ```
 
 ## 浏览器插件安装

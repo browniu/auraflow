@@ -96,7 +96,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   const handleDragOver = (e: React.DragEvent) => e.preventDefault();
 
   // Constants for Node Dimensions
-  const NODE_WIDTH = 220;
+  const NODE_WIDTH = 250;
   const NODE_HEIGHT = 100;
   const HEADER_HEIGHT = 32;
 
@@ -311,7 +311,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
               {/* EXECUTION OVERLAY - Action Buttons */}
               {isActive && mod?.type !== 'trigger' && (
                 <foreignObject x="0" y={NODE_HEIGHT + 10} width={NODE_WIDTH} height="80">
-                   <div className="flex flex-col gap-2 p-2 bg-white/90 backdrop-blur rounded-lg border border-gray-200 shadow-xl animate-fade-in-up">
+                   <div className="flex flex-col gap-2 p-2 bg-white/90 backdrop-blur rounded-lg border border-gray-200 animate-fade-in-up">
                       <div className="text-xs font-bold text-center text-gray-700">
                          需人工操作
                       </div>

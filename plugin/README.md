@@ -29,7 +29,7 @@ AuraFlow Automation Engine - 浏览器自动化执行引擎
 
 ## 配置说明
 
-插件默认连接 `http://localhost:3001/api` 服务端。
+插件默认连接 `http://localhost:3737/api` 服务端。
 
 如需修改，请编辑 `content.js` 中的 `API_BASE_URL` 常量。
 

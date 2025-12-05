@@ -7,7 +7,7 @@
 import { Module, Workflow } from '../types';
 
 // 服务端地址配置
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3737/api';
 
 // 默认项目ID (单用户模式，可扩展为多项目)
 const DEFAULT_PROJECT_ID = 'default_project';
