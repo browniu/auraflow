@@ -1,0 +1,12 @@
+{
+  "id": "mod_1764950179252",
+  "name": "启动触发器 副本",
+  "description": "工作流的初始输入参数定义",
+  "type": "trigger",
+  "isPreset": false,
+  "color": "#333333",
+  "properties": {
+    "input": "hello world"
+  },
+  "updatedAt": 1764950179256
+}

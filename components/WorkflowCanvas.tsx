@@ -39,6 +39,10 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   // Dragging state
   const [draggingNode, setDraggingNode] = useState<{ id: string, startX: number, startY: number, initialNodeX: number, initialNodeY: number } | null>(null);
 
+  // Canvas panning state
+  const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState<{ startX: number, startY: number, initialOffsetX: number, initialOffsetY: number } | null>(null);
+
   // Auto-execution for Trigger Nodes
   useEffect(() => {
     if (executionState.isRunning && executionState.activeNodeId) {
@@ -60,18 +64,26 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     const handleMouseMove = (e: MouseEvent) => {
       if (!svgRef.current) return;
       const rect = svgRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const x = e.clientX - rect.left - canvasOffset.x;
+      const y = e.clientY - rect.top - canvasOffset.y;
       setMousePos({ x, y });
 
       if (draggingNode) {
         onNodeMove(draggingNode.id, draggingNode.initialNodeX + (e.clientX - draggingNode.startX), draggingNode.initialNodeY + (e.clientY - draggingNode.startY));
+      }
+
+      // Handle canvas panning
+      if (isPanning) {
+        const newOffsetX = isPanning.initialOffsetX + (e.clientX - isPanning.startX);
+        const newOffsetY = isPanning.initialOffsetY + (e.clientY - isPanning.startY);
+        setCanvasOffset({ x: newOffsetX, y: newOffsetY });
       }
     };
 
     const handleMouseUp = () => {
       setDraggingNode(null);
       setLinkingSource(null);
+      setIsPanning(null);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -80,7 +92,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [draggingNode, onNodeMove]);
+  }, [draggingNode, onNodeMove, isPanning, canvasOffset]);
 
   const getModule = (id: string) => modules.find(m => m.id === id);
 
@@ -89,7 +101,8 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     const moduleId = e.dataTransfer.getData('moduleId');
     if (moduleId && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
-      onNodeAdd(moduleId, e.clientX - rect.left, e.clientY - rect.top);
+      // Account for canvas offset when dropping
+      onNodeAdd(moduleId, e.clientX - rect.left - canvasOffset.x, e.clientY - rect.top - canvasOffset.y);
     }
   };
 
@@ -100,11 +113,18 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   const NODE_HEIGHT = 100;
   const HEADER_HEIGHT = 32;
 
-  // Background Click Handler - Clears selection
+  // Background Click Handler - Starts panning or clears selection
   const handleBackgroundMouseDown = (e: React.MouseEvent) => {
-    // Only deselect if clicking directly on the SVG/Background
-    if (e.target === svgRef.current) {
+    // Only start panning if clicking directly on the SVG/Background
+    if (e.target === svgRef.current || (e.target as SVGElement).classList.contains('canvas-bg')) {
+      e.preventDefault();
       onNodeSelect(null);
+      setIsPanning({
+        startX: e.clientX,
+        startY: e.clientY,
+        initialOffsetX: canvasOffset.x,
+        initialOffsetY: canvasOffset.y
+      });
     }
   };
 
@@ -125,6 +145,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
         width="100%" 
         height="100%"
         onMouseDown={handleBackgroundMouseDown}
+        style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
       >
         <defs>
            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
@@ -135,6 +156,19 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
              </feMerge>
            </filter>
         </defs>
+
+        {/* Background for panning - covers entire canvas */}
+        <rect
+          className="canvas-bg"
+          x="-10000"
+          y="-10000"
+          width="20000"
+          height="20000"
+          fill="transparent"
+        />
+
+        {/* Canvas content wrapper with pan offset */}
+        <g transform={`translate(${canvasOffset.x}, ${canvasOffset.y})`}>
 
         {/* Edges */}
         {edges.map(edge => {
@@ -390,6 +424,8 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
             </g>
           );
         })}
+
+        </g>{/* End of canvas content wrapper */}
       </svg>
     </div>
   );
