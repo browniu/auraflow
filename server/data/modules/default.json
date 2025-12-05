@@ -12,7 +12,7 @@
   },
   {
     "id": "mod_1",
-    "name": "ChatGPT Prompt Generator",
+    "name": "GPT 提示词生成",
     "description": "使用 ChatGPT 生成专业提示词",
     "targetUrl": "https://chatgpt.com/?openaicom_referred=true",
     "selectors": {
@@ -28,7 +28,7 @@
   },
   {
     "id": "mod_2",
-    "name": "ChatGPT PRD Generator",
+    "name": "GPT PRD 生成",
     "description": "使用ChatGPT生成专业的产品PRD，用于交付给技术总监审核",
     "targetUrl": "https://chatgpt.com/?openaicom_referred=true",
     "selectors": {
@@ -44,7 +44,7 @@
   },
   {
     "id": "mod_3",
-    "name": "ChatGPT Developer",
+    "name": "GPT 开发文档生成",
     "description": "使用ChatGPT根据产品PRD，生成开发文档，用于交付给开发团队",
     "targetUrl": "https://chatgpt.com/?openaicom_referred=true",
     "selectors": {
@@ -60,7 +60,7 @@
   },
   {
     "id": "mod_4",
-    "name": "Gemini",
+    "name": "Gemini 提示词生成",
     "description": "使用 Google Gemini 生成专业提示词",
     "targetUrl": "https://gemini.google.com/app",
     "selectors": {

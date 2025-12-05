@@ -162,13 +162,25 @@ const AuraFlowApp: React.FC = () => {
   const handleNodeAdd = async (moduleId: string, x: number, y: number) => {
     if (!activeWorkflow) return;
     const module = modules.find(m => m.id === moduleId);
+    
+    // 创建节点时复制模组的完整数据，之后节点独立于模组存在
     const newNode: WorkflowNode = {
       id: `node_${Date.now()}`,
-      moduleId,
+      moduleId, // 保留来源引用
       x,
       y,
+      // 复制模组数据作为节点的独立副本
+      name: module?.name || '未知模组',
+      description: module?.description,
+      targetUrl: module?.targetUrl,
+      selectors: module?.selectors ? { ...module.selectors } : undefined,
+      promptTemplate: module?.promptTemplate,
+      color: module?.color || getColorForString(moduleId),
+      type: module?.type || 'app',
+      // 触发器节点复制默认属性
       ...(module?.type === 'trigger' && module?.properties ? { inputData: { ...module.properties } } : {})
     };
+    
     const nextWorkflow = {
       ...activeWorkflow,
       nodes: [...activeWorkflow.nodes, newNode]
@@ -271,11 +283,8 @@ const AuraFlowApp: React.FC = () => {
       return;
     }
 
-    // Find Start Node
-    const startNode = activeWorkflow.nodes.find(n => {
-      const m = modules.find(mod => mod.id === n.moduleId);
-      return m?.type === 'trigger';
-    });
+    // Find Start Node - 使用节点自身的 type 数据
+    const startNode = activeWorkflow.nodes.find(n => n.type === 'trigger');
 
     if (startNode) {
       setExecutionState({
@@ -307,24 +316,24 @@ const AuraFlowApp: React.FC = () => {
   const resolvePromptForNode = (node: WorkflowNode): string => {
      if (!activeWorkflow) return '';
      
-     const module = modules.find(m => m.id === node.moduleId);
-     let prompt = node.customPrompt || module?.promptTemplate || '';
+     // 使用节点自身的数据
+     let prompt = node.customPrompt || node.promptTemplate || '';
 
      // Find incoming edge
      const edge = activeWorkflow.edges.find(e => e.target === node.id);
      if (edge) {
         const prevNode = activeWorkflow.nodes.find(n => n.id === edge.source);
         if (prevNode) {
-           const prevModule = modules.find(m => m.id === prevNode.moduleId);
-           
-           if (prevModule?.type === 'trigger' && prevNode.inputData) {
+           // 使用前置节点自身的 type 数据
+           if (prevNode.type === 'trigger' && prevNode.inputData) {
+              const inputData = prevNode.inputData as Record<string, string>;
               // Replace variables {{key}} with value
-              Object.entries(prevNode.inputData).forEach(([key, val]) => {
+              Object.entries(inputData).forEach(([key, val]) => {
                  const regex = new RegExp(`{{${key}}}`, 'g');
                  prompt = prompt.replace(regex, val);
               });
               // Replace generic {{input}} with first value if available
-              const firstValue = Object.values(prevNode.inputData)[0];
+              const firstValue = Object.values(inputData)[0];
               if (firstValue) {
                   prompt = prompt.replace(/{{input}}/g, firstValue);
               }
@@ -340,8 +349,8 @@ const AuraFlowApp: React.FC = () => {
     const currentNode = activeWorkflow.nodes.find(n => n.id === currentNodeId);
     if (!currentNode) return;
 
-    const module = modules.find(m => m.id === currentNode.moduleId);
-    if (!module) return;
+    // 使用节点自身的数据，不再依赖 modules
+    const nodeName = currentNode.label || currentNode.name || '未知节点';
 
     // 1. Resolve Data & Copy to Clipboard
     const promptText = resolvePromptForNode(currentNode);
@@ -350,27 +359,27 @@ const AuraFlowApp: React.FC = () => {
       .catch(() => showToast("复制失败", "error"));
 
     // 2. 创建会话并打开应用
-    if (module.targetUrl) {
+    if (currentNode.targetUrl) {
       try {
         // 通过API创建真实会话
         const sessionResponse = await api.createSession({
           nodeId: currentNode.id,
-          moduleId: module.id,
+          moduleId: currentNode.moduleId,
           prompt: promptText,
-          selectors: module.selectors,
-          targetUrl: module.targetUrl,
+          selectors: currentNode.selectors,
+          targetUrl: currentNode.targetUrl,
           workflowId: activeWorkflow.id,
         });
 
         if (sessionResponse.success) {
-          const urlObj = new URL(module.targetUrl);
+          const urlObj = new URL(currentNode.targetUrl);
           urlObj.hash = `#session=${sessionResponse.sessionId}`;
           window.open(urlObj.toString(), '_blank');
           showToast(`会话已创建: ${sessionResponse.sessionId.slice(-8)}`, 'info');
         } else {
           // 服务器不可用时，使用本地会话ID
           const fallbackSessionId = `local_${Date.now()}`;
-          const urlObj = new URL(module.targetUrl);
+          const urlObj = new URL(currentNode.targetUrl);
           urlObj.hash = `#session=${fallbackSessionId}`;
           window.open(urlObj.toString(), '_blank');
           showToast('使用本地模式（服务器不可用）', 'info');
@@ -380,14 +389,16 @@ const AuraFlowApp: React.FC = () => {
         console.error('[AuraFlow] 创建会话失败:', e);
         const fallbackSessionId = `local_${Date.now()}`;
         try {
-          const urlObj = new URL(module.targetUrl);
+          const urlObj = new URL(currentNode.targetUrl);
           urlObj.hash = `#session=${fallbackSessionId}`;
           window.open(urlObj.toString(), '_blank');
           showToast('使用本地模式', 'info');
         } catch {
-          showToast(`模组 ${module.name} 的 URL 无效`, 'error');
+          showToast(`节点「${nodeName}」的 URL 无效`, 'error');
         }
       }
+    } else {
+      showToast(`节点「${nodeName}」未配置目标 URL`, 'error');
     }
   };
 
@@ -564,7 +575,6 @@ const AuraFlowApp: React.FC = () => {
 
   const renderEditor = () => {
     const selectedNode = activeWorkflow?.nodes.find(n => n.id === selectedNodeId);
-    const selectedModule = selectedNode ? modules.find(m => m.id === selectedNode.moduleId) : null;
     
     return (
     <div className="h-screen flex flex-col">
@@ -659,108 +669,148 @@ const AuraFlowApp: React.FC = () => {
                    </Button>
                 </div>
               </>
-            ) : (
-              // --- STATE: Node Properties ---
-              selectedNode && selectedModule && (
-                <div className="space-y-6 animate-fade-in flex flex-col h-full">
+            ) : selectedNode ? (
+              // --- STATE: Node Properties (独立于模组，使用节点自身数据) ---
+              <div className="space-y-6 animate-fade-in flex flex-col h-full">
+                {/* 节点基本信息 */}
+                <div className="space-y-2">
+                   <label className="text-xs font-bold text-gray-500 uppercase">节点名称</label>
+                   <div className="relative">
+                      <input 
+                        type="text" 
+                        value={selectedNode.label || ''} 
+                        onChange={(e) => handleNodeUpdate(selectedNode.id, { label: e.target.value })}
+                        onKeyDown={handleKeyDown}
+                        onBlur={() => saveActiveWorkflow()}
+                        placeholder={selectedNode.name || '未命名节点'}
+                        className="w-full p-2 pl-8 rounded border border-gray-200 focus:border-brand-gold focus:ring-1 focus:ring-brand-gold outline-none text-sm"
+                      />
+                      <ICONS.Input className="w-4 h-4 absolute left-2 top-2.5 text-gray-400"/>
+                   </div>
+                </div>
+
+                {/* 节点类型标识 */}
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-500">类型:</span>
+                  <span className={`px-2 py-0.5 rounded ${selectedNode.type === 'trigger' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                    {selectedNode.type === 'trigger' ? '触发器' : '应用'}
+                  </span>
+                  {!selectedNode.name && (
+                    <span className="px-2 py-0.5 rounded bg-red-100 text-red-600">数据不完整</span>
+                  )}
+                </div>
+
+                {/* 触发器节点：启动参数 */}
+                {selectedNode.type === 'trigger' && (
                   <div className="space-y-2">
-                     <label className="text-xs font-bold text-gray-500 uppercase">节点名称</label>
-                     <div className="relative">
-                        <input 
-                          type="text" 
-                          value={selectedNode.label || ''} 
-                          onChange={(e) => handleNodeUpdate(selectedNode.id, { label: e.target.value })}
-                          onKeyDown={handleKeyDown}
-                          onBlur={() => saveActiveWorkflow()}
-                          placeholder={selectedModule.name}
-                          className="w-full p-2 pl-8 rounded border border-gray-200 focus:border-brand-gold focus:ring-1 focus:ring-brand-gold outline-none text-sm"
-                        />
-                        <ICONS.Input className="w-4 h-4 absolute left-2 top-2.5 text-gray-400"/>
+                     <label className="text-xs font-bold text-gray-500 uppercase">启动参数 (Key: Value)</label>
+                     <div className="bg-white rounded border border-gray-200 p-2 space-y-2">
+                        {Object.entries(selectedNode.inputData || {}).map(([key, val]) => (
+                          <div key={key} className="flex gap-1 items-center">
+                             <input 
+                                value={key} 
+                                readOnly 
+                                className="w-1/3 text-xs bg-gray-50 p-1 rounded border-none text-gray-500"
+                             />
+                             <input 
+                                value={val} 
+                                onChange={(e) => handleNodeUpdate(selectedNode.id, {
+                                  inputData: { ...selectedNode.inputData, [key]: e.target.value }
+                                })}
+                                onKeyDown={handleKeyDown}
+                                onBlur={() => saveActiveWorkflow()}
+                                className="flex-1 text-xs p-1 border-b border-gray-200 focus:border-brand-gold outline-none"
+                             />
+                             <button 
+                               onClick={() => {
+                                  const newData = {...selectedNode.inputData};
+                                  delete newData[key];
+                                  handleNodeUpdate(selectedNode.id, { inputData: newData });
+                                  setTimeout(() => saveActiveWorkflow(), 0);
+                               }}
+                               className="text-gray-400 hover:text-red-500"
+                             >✕</button>
+                          </div>
+                        ))}
+                        <div className="flex gap-2 pt-2">
+                          <input id="newKey" placeholder="新 Key" className="w-1/3 text-xs p-1 border rounded outline-none" onKeyDown={handleKeyDown}/>
+                          <input id="newVal" placeholder="Value" className="flex-1 text-xs p-1 border rounded outline-none" onKeyDown={(e) => {
+                             if(e.key === 'Enter') {
+                                const keyInput = document.getElementById('newKey') as HTMLInputElement;
+                                const valInput = document.getElementById('newVal') as HTMLInputElement;
+                                if(keyInput.value) {
+                                   handleNodeUpdate(selectedNode.id, {
+                                      inputData: { ...selectedNode.inputData, [keyInput.value]: valInput.value }
+                                   });
+                                   keyInput.value = '';
+                                   valInput.value = '';
+                                   keyInput.focus();
+                                   setTimeout(() => saveActiveWorkflow(), 0);
+                                }
+                             }
+                          }}/>
+                          <Button 
+                            onClick={() => {
+                                const keyInput = document.getElementById('newKey') as HTMLInputElement;
+                                const valInput = document.getElementById('newVal') as HTMLInputElement;
+                                if(keyInput.value) {
+                                   handleNodeUpdate(selectedNode.id, {
+                                      inputData: { ...selectedNode.inputData, [keyInput.value]: valInput.value }
+                                   });
+                                   keyInput.value = '';
+                                   valInput.value = '';
+                                   setTimeout(() => saveActiveWorkflow(), 0);
+                                }
+                            }} 
+                            className="!p-1 text-xs"
+                          >+</Button>
+                        </div>
                      </div>
                   </div>
+                )}
 
-                  {selectedModule.type === 'trigger' && (
+                {/* 应用节点：目标URL和提示词 */}
+                {selectedNode.type !== 'trigger' && (
+                  <>
                     <div className="space-y-2">
-                       <label className="text-xs font-bold text-gray-500 uppercase">启动参数 (Key: Value)</label>
-                       <div className="bg-white rounded border border-gray-200 p-2 space-y-2">
-                          {Object.entries(selectedNode.inputData || {}).map(([key, val]) => (
-                            <div key={key} className="flex gap-1 items-center">
-                               <input 
-                                  value={key} 
-                                  readOnly 
-                                  className="w-1/3 text-xs bg-gray-50 p-1 rounded border-none text-gray-500"
-                               />
-                               <input 
-                                  value={val} 
-                                  onChange={(e) => handleNodeUpdate(selectedNode.id, {
-                                    inputData: { ...selectedNode.inputData, [key]: e.target.value }
-                                  })}
-                                  onKeyDown={handleKeyDown}
-                                  onBlur={() => saveActiveWorkflow()}
-                                  className="flex-1 text-xs p-1 border-b border-gray-200 focus:border-brand-gold outline-none"
-                               />
-                               <button 
-                                 onClick={() => {
-                                    const newData = {...selectedNode.inputData};
-                                    delete newData[key];
-                                    handleNodeUpdate(selectedNode.id, { inputData: newData });
-                                    // Trigger save after deletion
-                                    setTimeout(() => saveActiveWorkflow(), 0);
-                                 }}
-                                 className="text-gray-400 hover:text-red-500"
-                               >✕</button>
-                            </div>
-                          ))}
-                          <div className="flex gap-2 pt-2">
-                            <input id="newKey" placeholder="新 Key" className="w-1/3 text-xs p-1 border rounded outline-none" onKeyDown={handleKeyDown}/>
-                            <input id="newVal" placeholder="Value" className="flex-1 text-xs p-1 border rounded outline-none" onKeyDown={(e) => {
-                               if(e.key === 'Enter') {
-                                  const keyInput = document.getElementById('newKey') as HTMLInputElement;
-                                  const valInput = document.getElementById('newVal') as HTMLInputElement;
-                                  if(keyInput.value) {
-                                     handleNodeUpdate(selectedNode.id, {
-                                        inputData: { ...selectedNode.inputData, [keyInput.value]: valInput.value }
-                                     });
-                                     keyInput.value = '';
-                                     valInput.value = '';
-                                     keyInput.focus();
-                                     setTimeout(() => saveActiveWorkflow(), 0);
-                                  }
-                               }
-                            }}/>
-                            <Button 
-                              onClick={() => {
-                                  const keyInput = document.getElementById('newKey') as HTMLInputElement;
-                                  const valInput = document.getElementById('newVal') as HTMLInputElement;
-                                  if(keyInput.value) {
-                                     handleNodeUpdate(selectedNode.id, {
-                                        inputData: { ...selectedNode.inputData, [keyInput.value]: valInput.value }
-                                     });
-                                     keyInput.value = '';
-                                     valInput.value = '';
-                                     setTimeout(() => saveActiveWorkflow(), 0);
-                                  }
-                              }} 
-                              className="!p-1 text-xs"
-                            >+</Button>
-                          </div>
-                       </div>
+                      <label className="text-xs font-bold text-gray-500 uppercase">目标 URL</label>
+                      <input 
+                        type="text" 
+                        value={selectedNode.targetUrl || ''} 
+                        onChange={(e) => handleNodeUpdate(selectedNode.id, { targetUrl: e.target.value })}
+                        onKeyDown={handleKeyDown}
+                        onBlur={() => saveActiveWorkflow()}
+                        placeholder="https://..."
+                        className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold focus:ring-1 focus:ring-brand-gold outline-none text-xs font-mono"
+                      />
                     </div>
-                  )}
 
-                  <div className="pt-4 mt-auto">
-                    <Button 
-                      variant="danger"  
-                      onClick={handleDeleteNode} 
-                      className="w-full hover:bg-red-600 hover:text-white" 
-                      icon={<ICONS.Trash className="w-4 h-4"/>}
-                    >
-                      移除节点
-                    </Button>
-                  </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-gray-500 uppercase">提示词模板</label>
+                      <textarea 
+                        value={selectedNode.customPrompt || selectedNode.promptTemplate || ''} 
+                        onChange={(e) => handleNodeUpdate(selectedNode.id, { customPrompt: e.target.value })}
+                        onBlur={() => saveActiveWorkflow()}
+                        placeholder="使用 {{input}} 作为占位符"
+                        className="w-full p-2 rounded border border-gray-200 focus:border-brand-gold focus:ring-1 focus:ring-brand-gold outline-none text-xs font-mono h-24 resize-none"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* 删除按钮 - 始终可用 */}
+                <div className="pt-4 mt-auto">
+                  <Button 
+                    variant="danger"  
+                    onClick={handleDeleteNode} 
+                    className="w-full hover:bg-red-600 hover:text-white" 
+                    icon={<ICONS.Trash className="w-4 h-4"/>}
+                  >
+                    移除节点
+                  </Button>
                 </div>
-              )
-            )}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -769,7 +819,6 @@ const AuraFlowApp: React.FC = () => {
            <WorkflowCanvas 
               nodes={activeWorkflow?.nodes || []}
               edges={activeWorkflow?.edges || []}
-              modules={modules}
               onNodeAdd={handleNodeAdd}
               onNodeMove={handleNodeMove}
               onEdgeAdd={handleEdgeAdd}

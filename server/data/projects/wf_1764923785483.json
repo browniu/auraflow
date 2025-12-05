@@ -1,51 +1,68 @@
 {
   "id": "wf_1764923785483",
-  "name": "测试流程1",
+  "name": "闪念-资讯版",
   "nodes": [
     {
-      "id": "node_1764923786488",
+      "id": "node_1764952540648",
       "moduleId": "mod_start",
-      "x": 86,
-      "y": 230,
+      "x": -24,
+      "y": 312,
+      "name": "启动触发器",
+      "description": "工作流的初始输入参数定义",
+      "color": "#333333",
+      "type": "trigger",
       "inputData": {
-        "input": "我想做个去东北过年的计划表"
+        "input": "hello world"
       }
     },
     {
-      "id": "node_1764923787212",
+      "id": "node_1764952547950",
       "moduleId": "mod_1",
-      "x": 516,
-      "y": 307
+      "x": 277,
+      "y": 444,
+      "name": "GPT 提示词生成",
+      "description": "使用 ChatGPT 生成专业提示词",
+      "targetUrl": "https://chatgpt.com/?openaicom_referred=true",
+      "selectors": {
+        "input": "#prompt-textarea > p",
+        "submit": "#composer-submit-button",
+        "result": ".markdown",
+        "copy": ".text-token-text-primary:nth-child(2) .text-token-text-secondary"
+      },
+      "promptTemplate": "请基于我的原始需求描述，生成一份专业、清晰、精炼的提示词：\n\n{{input}}，输出格式为{\"prompt\": \"{{prompt}}\"}",
+      "color": "#74AA9C",
+      "type": "app"
     },
     {
-      "id": "node_1764927104619",
-      "moduleId": "mod_1",
-      "x": 417,
-      "y": 129
-    },
-    {
-      "id": "node_1764947314473",
-      "moduleId": "mod_1764947310921",
-      "x": 584,
-      "y": 490
+      "id": "node_1764952716054",
+      "moduleId": "mod_2",
+      "x": 582,
+      "y": 582,
+      "name": "GPT PRD 生成",
+      "description": "使用ChatGPT生成专业的产品PRD，用于交付给技术总监审核",
+      "targetUrl": "https://chatgpt.com/?openaicom_referred=true",
+      "selectors": {
+        "input": "#prompt-textarea > p",
+        "submit": "#composer-submit-button",
+        "result": ".markdown",
+        "copy": ".text-token-text-primary:nth-child(2) .text-token-text-secondary"
+      },
+      "promptTemplate": "根据提示词：\n\n{{prompt}}\n\n生成一份专业、清晰、精炼的产品PRD，用于交付给技术总监审核。输出格式为{\"prd\": \"{{prd}}\"}",
+      "color": "#74AA9C",
+      "type": "app"
     }
   ],
   "edges": [
     {
-      "id": "edge_1764923788494",
-      "source": "node_1764923786488",
-      "target": "node_1764923787212"
+      "id": "edge_1764952550964",
+      "source": "node_1764952540648",
+      "target": "node_1764952547950"
     },
     {
-      "id": "edge_1764927107245",
-      "source": "node_1764923786488",
-      "target": "node_1764927104619"
-    },
-    {
-      "id": "edge_1764947324285",
-      "source": "node_1764923786488",
-      "target": "node_1764947314473"
+      "id": "edge_1764952720619",
+      "source": "node_1764952547950",
+      "target": "node_1764952716054"
     }
   ],
-  "lastModified": 1764950949453
+  "lastModified": 1764952766524
 }

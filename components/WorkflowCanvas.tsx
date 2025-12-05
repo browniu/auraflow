@@ -1,11 +1,10 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Module, WorkflowNode, WorkflowEdge, ExecutionState } from '../types';
+import { WorkflowNode, WorkflowEdge, ExecutionState } from '../types';
 import { getColorForString, ICONS } from '../constants';
 
 interface WorkflowCanvasProps {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
-  modules: Module[];
   onNodeAdd: (moduleId: string, x: number, y: number) => void;
   onNodeMove: (id: string, x: number, y: number) => void;
   onEdgeAdd: (source: string, target: string) => void;
@@ -20,7 +19,6 @@ interface WorkflowCanvasProps {
 export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   nodes,
   edges,
-  modules,
   onNodeAdd,
   onNodeMove,
   onEdgeAdd,
@@ -33,6 +31,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isPanningRef = useRef<{ hasMoved: boolean } | null>(null);
   const [linkingSource, setLinkingSource] = useState<{ nodeId: string, x: number, y: number, color: string } | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   
@@ -41,24 +40,22 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
 
   // Canvas panning state
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState<{ startX: number, startY: number, initialOffsetX: number, initialOffsetY: number } | null>(null);
+  const [isPanning, setIsPanning] = useState<{ startX: number, startY: number, initialOffsetX: number, initialOffsetY: number, hasMoved: boolean } | null>(null);
 
   // Auto-execution for Trigger Nodes
   useEffect(() => {
     if (executionState.isRunning && executionState.activeNodeId) {
       const node = nodes.find(n => n.id === executionState.activeNodeId);
-      if (node) {
-        const mod = modules.find(m => m.id === node.moduleId);
-        if (mod?.type === 'trigger') {
-          // Visual delay for UX, then auto-continue without user confirmation
-          const timer = setTimeout(() => {
-            onContinueExecution(node.id);
-          }, 1000);
-          return () => clearTimeout(timer);
-        }
+      // 使用节点自身的 type 数据
+      if (node?.type === 'trigger') {
+        // Visual delay for UX, then auto-continue without user confirmation
+        const timer = setTimeout(() => {
+          onContinueExecution(node.id);
+        }, 1000);
+        return () => clearTimeout(timer);
       }
     }
-  }, [executionState.isRunning, executionState.activeNodeId, nodes, modules, onContinueExecution]);
+  }, [executionState.isRunning, executionState.activeNodeId, nodes, onContinueExecution]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -74,16 +71,32 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
 
       // Handle canvas panning
       if (isPanning) {
-        const newOffsetX = isPanning.initialOffsetX + (e.clientX - isPanning.startX);
-        const newOffsetY = isPanning.initialOffsetY + (e.clientY - isPanning.startY);
+        const deltaX = e.clientX - isPanning.startX;
+        const deltaY = e.clientY - isPanning.startY;
+        const newOffsetX = isPanning.initialOffsetX + deltaX;
+        const newOffsetY = isPanning.initialOffsetY + deltaY;
         setCanvasOffset({ x: newOffsetX, y: newOffsetY });
+        
+        // 标记已发生拖动（移动超过 3px 视为拖动）
+        if (!isPanning.hasMoved && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) {
+          setIsPanning({ ...isPanning, hasMoved: true });
+          if (isPanningRef.current) {
+            isPanningRef.current.hasMoved = true;
+          }
+        }
       }
     };
 
     const handleMouseUp = () => {
+      // 如果是点击背景（没有拖动），才清除选中状态
+      if (isPanningRef.current && !isPanningRef.current.hasMoved) {
+        onNodeSelect(null);
+      }
+      
       setDraggingNode(null);
       setLinkingSource(null);
       setIsPanning(null);
+      isPanningRef.current = null;
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -92,9 +105,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [draggingNode, onNodeMove, isPanning, canvasOffset]);
-
-  const getModule = (id: string) => modules.find(m => m.id === id);
+  }, [draggingNode, onNodeMove, isPanning, canvasOffset, onNodeSelect]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -113,18 +124,21 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   const NODE_HEIGHT = 100;
   const HEADER_HEIGHT = 32;
 
-  // Background Click Handler - Starts panning or clears selection
+  // Background Click Handler - Starts panning (selection cleared on mouseUp if no drag)
   const handleBackgroundMouseDown = (e: React.MouseEvent) => {
     // Only start panning if clicking directly on the SVG/Background
     if (e.target === svgRef.current || (e.target as SVGElement).classList.contains('canvas-bg')) {
       e.preventDefault();
-      onNodeSelect(null);
-      setIsPanning({
+      // 不立即清除选中状态，等 mouseUp 时判断是否为纯点击
+      const panState = {
         startX: e.clientX,
         startY: e.clientY,
         initialOffsetX: canvasOffset.x,
-        initialOffsetY: canvasOffset.y
-      });
+        initialOffsetY: canvasOffset.y,
+        hasMoved: false
+      };
+      setIsPanning(panState);
+      isPanningRef.current = { hasMoved: false };
     }
   };
 
@@ -176,8 +190,8 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           const target = nodes.find(n => n.id === edge.target);
           if (!source || !target) return null;
 
-          const sourceMod = getModule(source.moduleId);
-          const edgeColor = sourceMod?.color || getColorForString(source.moduleId);
+          // 使用节点自身的颜色数据
+          const edgeColor = source.color || getColorForString(source.moduleId);
 
           // Calculate connection points (Source Right, Target Left)
           const sourceX = source.x + NODE_WIDTH;
@@ -246,10 +260,10 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
 
         {/* Nodes */}
         {nodes.map(node => {
-          const mod = getModule(node.moduleId);
           const isSelected = selectedNodeId === node.id;
           const isActive = executionState.activeNodeId === node.id;
-          const nodeColor = mod?.color || getColorForString(node.moduleId);
+          // 使用节点自身的颜色数据
+          const nodeColor = node.color || getColorForString(node.moduleId);
           
           return (
             <g 
@@ -310,17 +324,17 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
                 y="21"
                 className={`text-xs font-bold pointer-events-none select-none ${isSelected || isActive ? 'fill-white' : 'fill-gray-700'}`}
               >
-                {node.label || mod?.name || '未知模组'}
+                {node.label || node.name || '未知模组'}
               </text>
 
               {/* Content Preview */}
               <foreignObject x="12" y={HEADER_HEIGHT + 10} width={NODE_WIDTH - 24} height={NODE_HEIGHT - HEADER_HEIGHT - 20}>
                   <div className="flex flex-col h-full pointer-events-none select-none">
                      <span className="text-[10px] font-mono uppercase tracking-wider mb-1" style={{ color: nodeColor }}>
-                        {mod?.type === 'trigger' ? '初始参数' : node.id.slice(-6).toUpperCase()}
+                        {node.type === 'trigger' ? '初始参数' : node.id.slice(-6).toUpperCase()}
                      </span>
                      <div className="text-[11px] text-gray-500 overflow-hidden leading-tight" style={{ maxHeight: '44px' }}>
-                        {mod?.type === 'trigger' ? (
+                        {node.type === 'trigger' ? (
                             node.inputData && Object.keys(node.inputData).length > 0 
                                 ? (
                                   <div className="flex flex-col gap-0.5">
@@ -336,14 +350,14 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
                         ) : (
                             node.customPrompt 
                                 ? `"${node.customPrompt}"` 
-                                : (mod?.targetUrl ? new URL(mod.targetUrl).hostname : '')
+                                : (node.targetUrl ? (() => { try { return new URL(node.targetUrl).hostname; } catch { return ''; } })() : '')
                         )}
                      </div>
                   </div>
               </foreignObject>
 
               {/* EXECUTION OVERLAY - Action Buttons */}
-              {isActive && mod?.type !== 'trigger' && (
+              {isActive && node.type !== 'trigger' && (
                 <foreignObject x="0" y={NODE_HEIGHT + 10} width={NODE_WIDTH} height="80">
                    <div className="flex flex-col gap-2 p-2 bg-white/90 backdrop-blur rounded-lg border border-gray-200 animate-fade-in-up">
                       <div className="text-xs font-bold text-center text-gray-700">
@@ -375,7 +389,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
               )}
 
               {/* Ports */}
-              {mod?.type !== 'trigger' && (
+              {node.type !== 'trigger' && (
                 <g 
                    transform={`translate(0, ${HEADER_HEIGHT + (NODE_HEIGHT - HEADER_HEIGHT) / 2})`}
                    onMouseUp={(e) => {

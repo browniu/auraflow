@@ -18,12 +18,28 @@ export interface Module {
 
 export interface WorkflowNode {
   id: string;
-  moduleId: string;
+  moduleId: string; // 保留引用，用于标识来源模组
   x: number;
   y: number;
-  label?: string;
-  customPrompt?: string; // Overrides module default
-  inputData?: Record<string, string>; // For Start node Key/Values
+  
+  // --- 独立节点数据（创建时从模组复制，之后独立管理）---
+  name: string;
+  description?: string;
+  targetUrl?: string;
+  selectors?: {
+    input: string;
+    submit: string;
+    result: string;
+    copy: string;
+  };
+  promptTemplate?: string;
+  color?: string;
+  type?: 'app' | 'trigger';
+  
+  // --- 节点特有配置 ---
+  label?: string; // 节点自定义标签，覆盖 name 显示
+  customPrompt?: string; // 覆盖 promptTemplate
+  inputData?: Record<string, string>; // For Trigger node Key/Values
 }
 
 export interface WorkflowEdge {
